@@ -431,10 +431,19 @@ async fn make_pair_(stream: impl StreamTrait, addr: SocketAddr, key: &str, limit
                     log::warn!("Relay authentication failed from {} - invalid key", addr);
                     return;
                 }
+                let claims = match crate::auth_ticket::verify_or_error(&rf.connection_ticket, &rf.id) {
+                    Ok(claims) => claims,
+                    Err(reason) => {
+                        log::warn!("Relay connection ticket rejected from {} for peer {}: {}", addr, rf.id, reason);
+                        crate::auth_ticket::record_connection_audit(None, &rf.id, "hbbr", &addr.ip().to_string(), "HBBR_RELAY", "FAILURE", &reason);
+                        return;
+                    }
+                };
                 if !rf.uuid.is_empty() {
                     let mut peer = PEERS.lock().await.remove(&rf.uuid);
                     if let Some(peer) = peer.as_mut() {
                         log::info!("Relayrequest {} from {} got paired", rf.uuid, addr);
+                        crate::auth_ticket::record_connection_audit(Some(&claims), &rf.id, "hbbr", &addr.ip().to_string(), "HBBR_RELAY", "SUCCESS", "中继连接已配对");
                         let id = format!("{}:{}", addr.ip(), addr.port());
                         USAGE.write().await.insert(id.clone(), Default::default());
                         if !stream.is_ws() && !peer.is_ws() {

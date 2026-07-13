@@ -495,12 +495,29 @@ impl RendezvousServer {
                     if let Some(sink) = sink.take() {
                         self.tcp_punch.lock().await.insert(try_into_v4(addr), sink);
                     }
+                    let claims = match crate::auth_ticket::verify_or_error(&rf.connection_ticket, &rf.id) {
+                        Ok(claims) => claims,
+                        Err(reason) => {
+                            log::warn!("Connection ticket rejected from {} for peer {}: {}", addr, rf.id, reason);
+                            crate::auth_ticket::record_connection_audit(None, &rf.id, "hbbs", &addr.ip().to_string(), "HBBS_REQUEST_RELAY", "FAILURE", &reason);
+                            let mut msg_out = RendezvousMessage::new();
+                            msg_out.set_relay_response(RelayResponse {
+                                refuse_reason: reason,
+                                ..Default::default()
+                            });
+                            allow_err!(self.send_to_tcp_sync(msg_out, addr).await);
+                            return true;
+                        }
+                    };
                     if let Some(peer) = self.pm.get_in_memory(&rf.id).await {
+                        crate::auth_ticket::record_connection_audit(Some(&claims), &rf.id, "hbbs", &addr.ip().to_string(), "HBBS_REQUEST_RELAY", "SUCCESS", "已转发中继请求");
                         let mut msg_out = RendezvousMessage::new();
                         rf.socket_addr = AddrMangle::encode(addr).into();
                         msg_out.set_request_relay(rf);
                         let peer_addr = peer.read().await.socket_addr;
                         self.tx.send(Data::Msg(msg_out.into(), peer_addr)).ok();
+                    } else {
+                        crate::auth_ticket::record_connection_audit(Some(&claims), &rf.id, "hbbs", &addr.ip().to_string(), "HBBS_REQUEST_RELAY", "FAILURE", "目标设备不在线或不存在");
                     }
                     return true;
                 }
@@ -624,6 +641,8 @@ impl RendezvousServer {
             socket_addr: AddrMangle::encode(addr).into(),
             pk: self.get_pk(&phs.version, phs.id).await,
             relay_server: phs.relay_server.clone(),
+            upnp_port: phs.upnp_port,
+            socket_addr_v6: phs.socket_addr_v6,
             ..Default::default()
         };
         if let Ok(t) = phs.nat_type.enum_value() {
@@ -658,6 +677,7 @@ impl RendezvousServer {
             socket_addr: la.local_addr.clone(),
             pk: self.get_pk(&la.version, la.id).await,
             relay_server: la.relay_server,
+            socket_addr_v6: la.socket_addr_v6,
             ..Default::default()
         };
         p.set_is_local(true);
@@ -688,6 +708,19 @@ impl RendezvousServer {
             });
             return Ok((msg_out, None));
         }
+        let claims = match crate::auth_ticket::verify_or_error(&ph.connection_ticket, &ph.id) {
+            Ok(claims) => claims,
+            Err(reason) => {
+                log::warn!("Connection ticket rejected from {} for peer {}: {}", addr, ph.id, reason);
+                crate::auth_ticket::record_connection_audit(None, &ph.id, "hbbs", &addr.ip().to_string(), "HBBS_PUNCH", "FAILURE", &reason);
+                let mut msg_out = RendezvousMessage::new();
+                msg_out.set_punch_hole_response(PunchHoleResponse {
+                    other_failure: reason,
+                    ..Default::default()
+                });
+                return Ok((msg_out, None));
+            }
+        };
         let id = ph.id;
         // punch hole request from A, relay to B,
         // check if in same intranet first,
@@ -700,6 +733,7 @@ impl RendezvousServer {
                 (r.last_reg_time.elapsed().as_millis() as i64, r.socket_addr)
             };
             if elapsed >= REG_TIMEOUT {
+                crate::auth_ticket::record_connection_audit(Some(&claims), &id, "hbbs", &addr.ip().to_string(), "HBBS_PUNCH", "FAILURE", "目标设备离线");
                 let mut msg_out = RendezvousMessage::new();
                 msg_out.set_punch_hole_response(PunchHoleResponse {
                     failure: punch_hole_response::Failure::OFFLINE.into(),
@@ -724,6 +758,7 @@ impl RendezvousServer {
                 if !dup { lock.push(PunchReqEntry { tm: Instant::now(), from_ip, to_ip, to_id: to_id_clone }); }
             }
 
+            crate::auth_ticket::record_connection_audit(Some(&claims), &id, "hbbs", &addr.ip().to_string(), "HBBS_PUNCH", "SUCCESS", "已转发连接请求");
             let mut msg_out = RendezvousMessage::new();
             let peer_is_lan = self.is_lan(peer_addr);
             let is_lan = self.is_lan(addr);
@@ -754,6 +789,10 @@ impl RendezvousServer {
                 msg_out.set_fetch_local_addr(FetchLocalAddr {
                     socket_addr,
                     relay_server,
+                    socket_addr_v6: ph.socket_addr_v6.clone(),
+                    connection_ticket: ph.connection_ticket.clone(),
+                    control_permissions: ph.control_permissions.clone(),
+                    controlled_context: ph.controlled_context.clone(),
                     ..Default::default()
                 });
             } else {
@@ -767,11 +806,19 @@ impl RendezvousServer {
                     socket_addr,
                     nat_type: ph.nat_type,
                     relay_server,
+                    udp_port: ph.udp_port,
+                    force_relay: ph.force_relay,
+                    upnp_port: ph.upnp_port,
+                    socket_addr_v6: ph.socket_addr_v6.clone(),
+                    connection_ticket: ph.connection_ticket.clone(),
+                    control_permissions: ph.control_permissions.clone(),
+                    controlled_context: ph.controlled_context.clone(),
                     ..Default::default()
                 });
             }
             Ok((msg_out, Some(peer_addr)))
         } else {
+            crate::auth_ticket::record_connection_audit(Some(&claims), &id, "hbbs", &addr.ip().to_string(), "HBBS_PUNCH", "FAILURE", "目标设备不存在");
             let mut msg_out = RendezvousMessage::new();
             msg_out.set_punch_hole_response(PunchHoleResponse {
                 failure: punch_hole_response::Failure::ID_NOT_EXIST.into(),

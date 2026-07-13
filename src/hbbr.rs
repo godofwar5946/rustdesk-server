@@ -1,4 +1,5 @@
 use clap::App;
+mod auth_ticket;
 mod common;
 mod relay_server;
 use flexi_logger::*;
@@ -43,3 +44,4 @@ fn main() -> ResultType<()> {
     )?;
     Ok(())
 }
+
