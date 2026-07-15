@@ -319,7 +319,7 @@ impl RendezvousServer {
         bytes: &BytesMut,
         addr: SocketAddr,
         socket: &mut FramedSocket,
-        key: &str,
+        _key: &str,
     ) -> ResultType<()> {
         if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(bytes) {
             match msg_in.union {
@@ -424,7 +424,7 @@ impl RendezvousServer {
                     });
                     socket.send(&msg_out, addr).await?
                 }
-                Some(rendezvous_message::Union::PunchHoleRequest(ph)) => {
+                Some(rendezvous_message::Union::PunchHoleRequest(_ph)) => {
                     // UDP PunchHoleRequest is intentionally unsupported.
                     // The supported client path sends PunchHoleRequest over TCP/WS.
                 }
@@ -791,8 +791,6 @@ impl RendezvousServer {
                     relay_server,
                     socket_addr_v6: ph.socket_addr_v6.clone(),
                     connection_ticket: ph.connection_ticket.clone(),
-                    control_permissions: ph.control_permissions.clone(),
-                    controlled_context: ph.controlled_context.clone(),
                     ..Default::default()
                 });
             } else {
@@ -811,8 +809,6 @@ impl RendezvousServer {
                     upnp_port: ph.upnp_port,
                     socket_addr_v6: ph.socket_addr_v6.clone(),
                     connection_ticket: ph.connection_ticket.clone(),
-                    control_permissions: ph.control_permissions.clone(),
-                    controlled_context: ph.controlled_context.clone(),
                     ..Default::default()
                 });
             }
@@ -1092,7 +1088,7 @@ impl RendezvousServer {
                 let arg = fds.next();
                 if let Some("-") = arg { lock.clear(); }
                 else {
-                    let mut start = arg.and_then(|x| x.parse::<usize>().ok()).unwrap_or(0);
+                    let start = arg.and_then(|x| x.parse::<usize>().ok()).unwrap_or(0);
                     let mut page_size = fds.next().and_then(|x| x.parse::<usize>().ok()).unwrap_or(10);
                     if page_size == 0 { page_size = 10; }
                     for (_, e) in lock.iter().enumerate().skip(start).take(page_size) {
