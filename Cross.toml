@@ -1,5 +1,6 @@
-[target.x86_64-unknown-linux-gnu]
+[target.x86_64-unknown-linux-musl]
 pre-build = [
-    "dpkg --add-architecture $CROSS_DEB_ARCH",
-    "apt-get update && apt-get --assume-yes install pkg-config libssl-dev:$CROSS_DEB_ARCH"
+    "dpkg --add-architecture amd64",
+    "apt-get update",
+    "apt-get install --assume-yes pkg-config libssl-dev:amd64"
 ]
