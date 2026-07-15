@@ -64,6 +64,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
+          # Keep --all-features: without it, cross builds hit openssl-sys discovery failures in CI.
           args: --release --all-features --target=${{ matrix.job.target }}
           use-cross: true  
 
