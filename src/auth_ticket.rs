@@ -63,15 +63,6 @@ pub(crate) fn verify_or_error(ticket: &str, expected_target: &str) -> Result<Tic
 }
 
 pub(crate) fn record_connection_audit(claims: Option<&TicketClaims>, target: &str, source: &str, source_ip: &str, phase: &str, outcome: &str, reason: &str) {
-    let url = read_env(&["CONNECTION_AUDIT_URL", "CONNECTION-AUDIT-URL"]);
-    if url.is_empty() {
-        return;
-    }
-    let secret = read_env(&["CONNECTION_AUDIT_SECRET", "CONNECTION-AUDIT-SECRET", "CONNECTION_TICKET_SECRET", "CONNECTION-TICKET-SECRET"]);
-    if secret.len() < 32 {
-        log::warn!("Connection audit skipped: audit secret is not configured");
-        return;
-    }
     let claims = claims.cloned().unwrap_or_default();
     let body = serde_json::json!({
         "actor": claims.actor,
@@ -83,16 +74,7 @@ pub(crate) fn record_connection_audit(claims: Option<&TicketClaims>, target: &st
         "outcome": outcome,
         "reason": reason,
     }).to_string();
-    std::thread::spawn(move || {
-        let result = minreq::post(&url)
-            .with_header("Content-Type", "application/json")
-            .with_header("X-Connection-Audit-Secret", &secret)
-            .with_body(body)
-            .send();
-        if let Err(err) = result {
-            log::warn!("Connection audit callback failed: {}", err);
-        }
-    });
+    crate::connection_audit::record(body);
 }
 
 fn sign(payload_part: &str, secret: &str) -> Result<Vec<u8>, String> {

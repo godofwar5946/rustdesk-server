@@ -1626,8 +1626,12 @@ version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c785bc6027fd359756e538541c8624012ba3776d3d3fe123885643092ed4132"
 dependencies = [
+ "lazy_static",
  "log",
  "punycode",
+ "rustls 0.20.4",
+ "webpki",
+ "webpki-roots 0.22.4",
 ]
 
 [[package]]

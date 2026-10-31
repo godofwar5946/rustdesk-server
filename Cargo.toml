@@ -26,7 +26,8 @@ serde_json = "1.0"
 lazy_static = "1.4"
 clap = "2"
 rust-ini = "0.18"
-minreq = { version = "2.4", features = ["punycode"] }
+# 审计回调需要 HTTPS；使用内置根证书，兼容没有系统证书包的精简容器。
+minreq = { version = "2.4", features = ["punycode", "https-rustls"] }
 machine-uid = "0.2"
 mac_address = "1.1.5"
 whoami = "1.2"

@@ -1,4 +1,5 @@
 mod auth_ticket;
+mod connection_audit;
 mod rendezvous_server;
 pub use rendezvous_server::*;
 pub mod common;

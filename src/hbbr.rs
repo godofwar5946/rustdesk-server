@@ -1,5 +1,6 @@
 use clap::App;
 mod auth_ticket;
+mod connection_audit;
 mod common;
 mod relay_server;
 use flexi_logger::*;
